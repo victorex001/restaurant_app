@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"restaurant_app/database"
 	"restaurant_app/models"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,11 +20,68 @@ var foodCollection *mongo.Collection = database.OpenCollection(database.Client, 
 var validate = validator.New()
 
 
-func GetFoods() gin.HandlerFunc{
-	return func(c *gin.Context){
-		
-	}
+func GetFoods() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // Context with timeout for database operations
+        ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+        defer cancel()
+
+        // Parse pagination parameters with defaults
+        recordPerPage, err := strconv.Atoi(c.DefaultQuery("recordPerPage", "10"))
+        if err != nil || recordPerPage < 1 {
+            recordPerPage = 10 // Default and minimum records per page
+        }
+
+        page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+        if err != nil || page < 1 {
+            page = 1 // Default and minimum page number
+        }
+
+        startIndex := (page - 1) * recordPerPage
+		startIndex, err = strconv.Atoi(c.Query("startIndex"))
+
+        // MongoDB aggregation pipeline
+        matchStage := bson.D{{Key: "$match", Value: bson.D{{}}}} // Adjust this to filter your documents if needed
+
+        // We will now use the groupStage to count documents
+        groupStage := bson.D{
+            {Key: "$group", Value: bson.D{
+                {Key: "_id", Value: nil}, // Grouping without a specific field to count all
+                {Key: "total_count", Value: bson.D{{Key: "$sum", Value: 1}}}, // Summing 1 for each document
+            }},
+        }
+
+        // Projection stage to shape the output, including a pagination mechanism on a field "data"
+        projectStage := bson.D{
+            {Key: "$project", Value: bson.D{
+                {Key: "_id", Value: 0},
+                {Key: "total_count", Value: 1}, // Include total count in the output
+                {Key: "food_items", Value: bson.D{{Key: "$slice", Value: bson.A{"$data", startIndex, recordPerPage}}}}, // Paginate "data" array
+            }},
+        }
+
+        // Build the pipeline with all stages
+        pipeline := mongo.Pipeline{matchStage, groupStage, projectStage}
+
+        // Execute the aggregation query
+        cursor, err := foodCollection.Aggregate(ctx, pipeline)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to execute query: " + err.Error()})
+            return
+        }
+
+        var results []bson.M
+        if err := cursor.All(ctx, &results); err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode results: " + err.Error()})
+            return
+        }
+
+        c.JSON(http.StatusOK, results)
+    }
 }
+
+
+
 
 func GetFood() gin.HandlerFunc{
 	return func(c *gin.Context){
@@ -64,8 +122,8 @@ func CreateFood() gin.HandlerFunc{
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
-		food.Created_at, _ = time.Parse(time.RFC3339, time.Now()).Format(time.RFC3339)
-		food.Updated_at, _ = time.Parse(time.RFC3339, time.Now()).Format(time.RFC3339)
+		food.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		food.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		food.ID = primitive.NewObjectID()
 		food.Food_id = food.ID.Hex()
 		var num = toFixed(*food.Price, 2)
