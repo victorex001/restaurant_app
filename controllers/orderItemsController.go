@@ -116,37 +116,40 @@ func ItemsByOrder(id string) (OrderItems []primitive.M, err error){
 	}}}
 
 
-	projectStage := bson.D{{Key "$project", Value: bson.D{
-		{Key: "id", Value: 0},
-		{Key: "amount", Value: "$food.price"},
-		{Key: "total_count", Value: 1},
-		{Key: "food_name", Value: "$food.name"},
-		{Key: "food_image", Value: "$food.food_image"},
-		{Key: "table_number", Value: "$table.table_number"},
-		{Key: "table_id", Value: "$table.table_id"},
-		{Key: "order_id", Value: "$order.order_id"},
-		{Key: "quanitity", Value: 1},
+	projectStage := bson.D{{Key: "$project", Value: bson.M{
+		"id": 0,
+		"amount": "$food.price",
+		"total_count": 1,
+		"food_name": "$food.name",
+		"food_image": "$food.food_image",
+		"table_number": "$table.table_number",
+		"table_id": "$table.table_id",
+		"order_id": "$order.order_id",
+		"quantity": 1, // Corrected from "quanitity"
 	}}}
-
-	groupStage := bson.D{{Key: "$group", Value: bson.D{
-		{Key: "_id", Value: bson.D{
-			{Key: "order_id", Value: "$order_id"},
-			{Key: "table_id", Value: "$table_id"},
-			{Key: "table_number", Value: "$table_number"}
+	
+	groupStage := bson.D{
+		{Key: "$group", Value: bson.M{
+			"_id": bson.M{
+				"order_id": "$order_id",
+				"table_id": "$table_id",
+				"table_number": "$table_number",
+			},
+			"payment_due": bson.M{"$sum": "$amount"},
+			"total_count": bson.M{"$sum": 1},
+			"order_items": bson.M{"$push": "$$ROOT"},  // Correct usage
 		}},
-		{Key: "payment_due", Value: bson.D{{Key: "$sum", Value: "$amount"}}},
-		{Key: "total_count", Value: bson.D{{Key: "$sum", Value: 1}}},
-		{Key: "order_items", Value: bson.D{{Key: "$push", Value: bson.D{}}}}
+	}
+	
+	
+	projectStage2 := bson.D{{Key: "$project", Value: bson.M{
+		"id": 0,
+		"payment_due": 1,
+		"total_count": 1,
+		"table_number": "$_id.table_number",
+		"order_items": 1,
 	}}}
-
-
-	projectStage2 := bson.D{{Key: "$project", bson.D{
-		{Key: "id", Value: 0},
-		{Key: "payment_due", Value: 1},
-		{Key: "total_count", Value: 1}.
-		{Key: "table_number", Value: "$_id.table_number"},
-		{Key: "order_items", Value: 1}
-	}}}
+	
 
 	// Combine all stages into a pipeline
 
@@ -164,19 +167,19 @@ func ItemsByOrder(id string) (OrderItems []primitive.M, err error){
 	}
 
 	result, err := orderCollection.Aggregate(ctx, pipeline)
-	if err != nil{
-		panic(err)
-		return
+	if err != nil {
+		return nil, err  // Handle error appropriately
 	}
-	defer cancel()
-	
-	err = result.All(ctx, &OrderItems)
-	if err != nil{
-		panic(err)
-		return
+	defer result.Close(ctx)  // Ensure cursor is closed
+
+	var orderItems []primitive.M
+	err = result.All(ctx, &orderItems)
+	if err != nil {
+		return nil, err  // Handle error appropriately
 	}
-	
-	return OrderItems, err
+
+	return orderItems, nil
+
 }
 
 
@@ -209,8 +212,9 @@ func CreateOrderItem() gin.HandlerFunc{
 				return
 			}
 			orderItem.ID = primitive.NewObjectID()
-			orderItem.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-			orderItem.Updated_at, = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+			orderItem.Created_at = time.Now()
+			orderItem.Updated_at = time.Now() // Directly assign the current time
+
 			orderItem.Order_item_id = orderItem.ID.Hex()
 
 			var num = toFixed(*orderItem.Unit_price, 2)
@@ -256,7 +260,7 @@ func UpdateOrderItem() gin.HandlerFunc{
 		orderItem.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		orderItem.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 
-		updateObj = append(updateObj, bson.E{Key: "updated_at", orderItem.Updated_at})
+		updateObj = append(updateObj, bson.E{Key: "updated_at", Value: orderItem.Updated_at})
 
 		upsert := true
         opts := options.UpdateOptions{Upsert: &upsert}

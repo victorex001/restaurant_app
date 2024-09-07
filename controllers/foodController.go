@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"restaurant_app/database"
 	"restaurant_app/models"
@@ -19,7 +20,8 @@ import (
 
 
 var foodCollection *mongo.Collection = database.OpenCollection(database.Client, "food")
-var validate = validator.New()
+
+var validate validator.New()
 
 
 func GetFoods() gin.HandlerFunc {
@@ -58,10 +60,8 @@ func GetFoods() gin.HandlerFunc {
             {Key: "$project", Value: bson.D{
                 {Key: "_id", Value: 0},
                 {Key: "total_count", Value: 1}, // Include total count in the output
-                {Key: "food_items", Value: bson.D{{Key: "$slice", Value: bson.A{"$data", startIndex, recordPerPage}}}}, // Paginate "data" array
-            }},
-        }
-
+                {Key: "food_items", Value: bson.D{{Key: "$slice", Value: []interface{}{"$data", startIndex, recordPerPage}}}}, // Paginate "data" array
+            }}}
         // Build the pipeline with all stages
         pipeline := mongo.Pipeline{matchStage, groupStage, projectStage}
 
@@ -111,7 +111,7 @@ func CreateFood() gin.HandlerFunc{
 		}
 		validationErr := validate.Struct(food)
 		if validationErr != nil{
-			c.JSON(http.StatusBadRequest, gin.H{"error":validationErr.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 			return
 		}
 		// To confirm the menu exist before creating the food
@@ -145,7 +145,7 @@ func round(num float64) int {
 }
 
 func toFixed(num float64, precision int) float64{
-	output := mat.Pow(10, float64(precision))
+	output := math.Pow(10, float64(precision))
 	return float64(round(num*output)) /  output
 }
 
@@ -162,7 +162,7 @@ func UpdateFood() gin.HandlerFunc{
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		var updateObj primitve.D{}
+		updateObj := primitive.D{}
 
 		if food.Name != nil {
 			updateObj = append(updateObj, bson.E{Key: "name", Value: food.Name})

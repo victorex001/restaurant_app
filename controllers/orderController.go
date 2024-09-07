@@ -18,7 +18,7 @@ import (
 )
 
 var orderCollection *mongo.Collection = database.OpenCollection(database.Client, "order")
-var validate = validator.New()
+var validate validator.New()
 
 func GetOrders() gin.HandlerFunc{
 	return func(c *gin.Context){

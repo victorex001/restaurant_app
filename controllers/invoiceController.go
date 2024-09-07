@@ -49,39 +49,50 @@ func GetInvoices() gin.HandlerFunc{
 }
 
 func GetInvoice() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		defer cancel()
+    return func(c *gin.Context) {
+        var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+        defer cancel() // This ensures that the context is always cancelled.
 
-		invoiceId := c.Param("invoice_id")
+        invoiceId := c.Param("invoice_id")
 
-		var invoice models.Invoice
+        var invoice models.Invoice
+        err := invoiceCollection.FindOne(ctx, bson.M{"invoice_id": invoiceId}).Decode(&invoice)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "error occurred while listing invoice item"})
+            return // Ensure to return after sending the response.
+        }
 
-		err := invoiceCollection.FindOne(ctx, bson.M{"invoice_id": invoiceId}).Decode(&invoice)
-		if err!= nil{
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing invoice item"})
-		}
+        var invoiceView InvoiceViewFormat
+        allOrderItems, err := ItemsByOrder(invoice.Order_id)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return // Handle errors returned by ItemsByOrder.
+        }
 
-		var invoiceView InvoiceViewFormat
+        // Check if order items were found and manage the nil slice if not.
+        if len(allOrderItems) == 0 {
+            c.JSON(http.StatusNotFound, gin.H{"error": "No order items found"})
+            return
+        }
 
-		allOrderItems, err := ItemsByOrder(invoice.Order_id)
-		invoiceView.Order_id = invoice.Order_id
-		invoiceView.Payment_due_date = invoice.Payment_due_date
+        invoiceView.Order_id = invoice.Order_id
+        invoiceView.Payment_due_date = invoice.Payment_due_date
 
-		invoiceView.Payment_method = "null"
-		if invoice.Payment_method != nil{
-			invoiceView.Payment_method = *invoice.Payment_method
-		}
+        invoiceView.Payment_method = "null"
+        if invoice.Payment_method != nil {
+            invoiceView.Payment_method = *invoice.Payment_method
+        }
 
-		invoiceView.Invoice_id = invoice.Invoice_id
-		invoiceView.Payment_status = *&invoice.Payment_status
-		invoiceView.Payment_due = allOrderItems[0]["payment_due"]
-		invoiceView.Table_number = allOrderItems[0]["table_number"]
-		invoiceView.Order_details = allOrderItems[0]["order_items"]
+        invoiceView.Invoice_id = invoice.Invoice_id
+        invoiceView.Payment_status = *&invoice.Payment_status
+        invoiceView.Payment_due = allOrderItems[0]["payment_due"]
+        invoiceView.Table_number = allOrderItems[0]["table_number"]
+        invoiceView.Order_details = allOrderItems[0]["order_items"]
 
-		c.JSON(http.StatusOK, invoiceView)
-	}
+        c.JSON(http.StatusOK, invoiceView)
+    }
 }
+
 
 func CreateInvoice() gin.HandlerFunc{
 	return func(c *gin.Context){
