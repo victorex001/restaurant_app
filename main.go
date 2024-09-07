@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 	"restaurant_app/database"
-	"restaurant_app/middleware"
+	"restaurant_app/middlewares"
 	"restaurant_app/routes"
 
 	"github.com/gin-gonic/gin"
