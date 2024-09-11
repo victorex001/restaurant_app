@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"restaurant_app/database"
@@ -99,6 +100,20 @@ func UpdateAllToken(signedToken string, signedRefreshToken string, userId string
 }
 
 
-func ValidateToken(){
+func ValidateToken(claims *SignedDetails, msg string){
+	
+	jwt.ParseWithClaims(
+
+	)
+
+
+	// Check if the token is inValid
+	class, ok := token.Claims.(*SignedDetails)
+	if !ok {
+		msg = fmt.Sprintf("the token is inValid")
+		return
+	}
+	
+	// Check if the token is expired
 	
 }
