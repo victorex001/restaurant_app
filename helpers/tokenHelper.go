@@ -2,16 +2,13 @@ package helpers
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"restaurant_app/database"
 	"time"
 
-	// jwt "github.com/dgrijalva/jwt-go" // Corrected import path
-	// "github.com/golang-jwt/jwt"
-	// "github.com/golang-jwt/jwt/v4"
-	"github.com/golang-jwt/jwt"
+	jwt "github.com/dgrijalva/jwt-go"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -100,20 +97,34 @@ func UpdateAllToken(signedToken string, signedRefreshToken string, userId string
 }
 
 
-func ValidateToken(claims *SignedDetails, msg string){
+func ValidateToken(signedToken string) (claims *SignedDetails, msg string){
 	
-	jwt.ParseWithClaims(
+	token, err := jwt.ParseWithClaims(
+		signedToken,
+		&SignedDetails{},
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(SECRET_KEY), nil
+		})
+	if err != nil{
+		log.Printf("Failed to sign the refresh token: %v", err)
+        return
 
-	)
+	}
 
 
 	// Check if the token is inValid
-	class, ok := token.Claims.(*SignedDetails)
+	claims, ok := token.Claims.(*SignedDetails)
 	if !ok {
-		msg = fmt.Sprintf("the token is inValid")
-		return
+		msg = "the token is inValid"
+		log.Printf("Failed to sign the refresh token: %v", msg)
+        return
 	}
 	
 	// Check if the token is expired
-	
+	if claims.ExpiresAt < time.Now().Local().Unix(){
+		msg = "Token is expired"
+		log.Printf("Failed to sign the refresh token: %v", msg)
+		return
+	}
+	return claims, msg
 }
